@@ -35,6 +35,7 @@ class ModbusPDU:
         self.registers: list[int] = registers or []
         self.count: int = count or len(self.registers)
         self.status: int = status
+        self.exception_code: int = 0
         self.fut: asyncio.Future
 
     def isError(self) -> bool:
@@ -56,7 +57,7 @@ class ModbusPDU:
             raise ValueError(f"9 < address {address} < 65535 !")
 
     def __str__(self) -> str:
-        """Build a representation of an exception response."""
+        """Build a representation of a Modbus response."""
         return (
             f"{self.__class__.__name__}("
             f"dev_id={self.dev_id}, "
@@ -115,6 +116,20 @@ class ExceptionResponse(ModbusPDU):
     GATEWAY_PATH_UNAVIABLE = 0x0A
     GATEWAY_NO_RESPONSE = 0x0B
 
+    exception_code_dict = {
+        0x00: "None",
+        0x01: "Illegal Function", 
+        0x02: "Illegal Data Address",
+        0x03: "Illegal Data Value",
+        0x04: "Slave Device Failure",
+        0x05: "Acknowledge",
+        0x06: "Slave Device Busy",
+        0x07: "Negative Acknowledge",
+        0x08: "Memory Parity Error",
+        0x0A: "Gateway Path Unavailable",
+        0x0B: "Gateway Target Device Failed to Respond",
+    }
+
     def __init__(
             self,
             function_code: int,
@@ -125,7 +140,8 @@ class ExceptionResponse(ModbusPDU):
         super().__init__(transaction_id=transaction, dev_id=slave)
         self.function_code = function_code | 0x80
         self.exception_code = exception_code
-        Log.error(f"Exception response {self.function_code} / {self.exception_code}")
+        self.exception_name = self.exception_code_dict.get(self.exception_code, f"Unknown Exception value: {self.exception_code}")
+        Log.error(f"Exception response FC{self.function_code & 0x7F} / {self.exception_name}")
 
     def encode(self) -> bytes:
         """Encode a modbus exception response."""
@@ -134,3 +150,4 @@ class ExceptionResponse(ModbusPDU):
     def decode(self, data: bytes) -> None:
         """Decode a modbus exception response."""
         self.exception_code = int(data[0])
+        self.exception_name = self.exception_code_dict.get(self.exception_code, f"Unknown Exception value: {self.exception_code}")
